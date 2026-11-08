@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Crossword Solver</title>
+<style>
+:root{--bg:#f6f7f9;--panel:#fff;--text:#1a1d21;--muted:#5f6773;--line:#c4c9d1;--cell:#fff;--black:#1a1d21;--hl:#fff0a8;--sel:#ffd23f;--ok:#1d4ed8;--okbg:#dbe7ff;--bad:#d11a2a;--badbg:#ffdcdc;--btn:#eceef2;--accent:#2563eb;--num:#4b5360;color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#121417;--panel:#1b1e23;--text:#e8eaed;--muted:#9aa3ad;--line:#3a4048;--cell:#23272d;--black:#050607;--hl:#4d4420;--sel:#8a6f10;--ok:#7db0ff;--okbg:#1c2f52;--bad:#ff7b7b;--badbg:#52232a;--btn:#2a2f36;--accent:#5b9bff;--num:#a7b0ba;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#121417;--panel:#1b1e23;--text:#e8eaed;--muted:#9aa3ad;--line:#3a4048;--cell:#23272d;--black:#050607;--hl:#4d4420;--sel:#8a6f10;--ok:#7db0ff;--okbg:#1c2f52;--bad:#ff7b7b;--badbg:#52232a;--btn:#2a2f36;--accent:#5b9bff;--num:#a7b0ba;color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:15px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+button{font:inherit;color:var(--text);background:var(--btn);border:1px solid var(--line);border-radius:6px;padding:7px 12px;cursor:pointer}
+button:hover:not(:disabled){border-color:var(--accent)}
+button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 14px;background:var(--panel);border-bottom:1px solid var(--line)}
+.title{font-weight:600;font-size:17px;flex:1;min-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#timer{font-variant-numeric:tabular-nums;font-weight:600;font-size:17px;min-width:84px;text-align:center}
+#error{margin:10px 14px 0;padding:9px 12px;border:1px solid var(--bad);background:var(--badbg);color:var(--bad);border-radius:6px}
+#empty{padding:48px 20px;text-align:center;color:var(--muted)}
+main{display:flex;gap:18px;padding:14px;align-items:flex-start;flex-wrap:wrap}
+.left{flex:0 0 auto;max-width:100%}
+.ctrl{display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap}
+#clueBar{flex:1 1 100%;min-height:42px;padding:8px 10px;background:var(--panel);border:1px solid var(--line);border-radius:6px}
+#clueBar b{margin-right:6px}
+#gridWrap{max-width:100%;overflow:auto}
+#grid{display:grid;grid-template-columns:repeat(var(--w),var(--cs));grid-auto-rows:var(--cs);gap:1px;background:var(--line);border:2px solid var(--black);width:max-content}
+.cell{position:relative;display:flex;align-items:center;justify-content:center;background:var(--cell);font-size:calc(var(--cs)*.55);font-weight:600;cursor:pointer;user-select:none;-webkit-user-select:none}
+.cell.black{background:var(--black);cursor:default}
+.cell .n{position:absolute;top:1px;left:2px;font-size:calc(var(--cs)*.26);font-weight:500;line-height:1;color:var(--num)}
+.cell.ok{color:var(--ok);background:var(--okbg)}
+.cell.bad{color:var(--bad);background:var(--badbg)}
+.cell.hl{background:var(--hl)}
+.cell.sel{background:var(--sel);box-shadow:inset 0 0 0 2px var(--accent)}
+.clues{flex:1 1 300px;min-width:260px;max-width:520px;display:flex;flex-direction:column;gap:12px}
+.cl{background:var(--panel);border:1px solid var(--line);border-radius:6px;overflow:hidden}
+.cl h2{margin:0;padding:7px 10px;font-size:14px;border-bottom:1px solid var(--line)}
+.cl ol{list-style:none;margin:0;padding:0;max-height:32vh;overflow-y:auto;position:relative}
+.cl li{padding:5px 10px;cursor:pointer;border-left:3px solid transparent}
+.cl li b{display:inline-block;min-width:24px;margin-right:4px}
+.cl li.cross{background:var(--hl)}
+.cl li.on{background:var(--sel);border-left-color:var(--accent)}
+#modal{position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;padding:16px;z-index:10}
+#modal[hidden],[hidden]{display:none!important}
+.dlg{background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:20px;max-width:520px;width:100%}
+.dlg h2{margin:0 0 10px;font-size:19px}
+.dlg p{word-break:break-word}
+.dlg .row{display:flex;gap:8px;justify-content:flex-end}
+#kb{position:fixed;left:0;bottom:0;width:1px;height:1px;opacity:0;border:0;padding:0;font-size:16px}
+@media (min-width:900px){.cl ol{max-height:calc((100vh - 170px)/2 - 34px)}}
+</style>
+</head>
+<body>
+<header class="bar">
+  <div class="title" id="title">Crossword Solver</div>
+  <button id="openBtn" class="primary">Open Puzzle</button>
+  <span id="timer" aria-label="Elapsed time">00:00:00</span>
+  <button id="themeBtn">Dark mode</button>
+  <input type="file" id="file" accept=".ipuz,.puz,.json" hidden>
+</header>
+<div id="error" role="alert" hidden></div>
+<div id="empty">Open an .ipuz or .puz file to start solving.</div>
+<main id="main" hidden>
+  <section class="left">
+    <div class="ctrl">
+      <button id="checkThis">Check This</button>
+      <button id="checkAll">Check All</button>
+      <div id="clueBar"></div>
+    </div>
+    <div id="gridWrap"><div id="grid"></div></div>
+  </section>
+  <aside class="clues">
+    <div class="cl"><h2>Across</h2><ol id="across"></ol></div>
+    <div class="cl"><h2>Down</h2><ol id="down"></ol></div>
+  </aside>
+</main>
+<div id="modal" hidden>
+  <div class="dlg" role="dialog" aria-modal="true" aria-labelledby="dlgTitle">
+    <h2 id="dlgTitle">Puzzle complete</h2>
+    <p id="dlgMsg"></p>
+    <div class="row"><button id="copyBtn" class="primary">Copy</button><button id="closeBtn">Close</button></div>
+  </div>
+</div>
+<input id="kb" autocomplete="off" autocapitalize="characters" autocorrect="off" spellcheck="false" aria-label="Crossword input">
+
+<script>
+"use strict";
+/* ---------- State ---------- */
+let P = null;                 // current puzzle
+let sel = {r:0, c:0}, dir = 'A';
+let timerStart = 0, finalMs = 0, timerId = null, done = false, resultString = '';
+const $ = id => document.getElementById(id);
+
+/* ---------- Parsing ---------- */
+function cleanText(s){
+  const t = document.createElement('textarea');
+  t.innerHTML = String(s == null ? '' : s).replace(/<[^>]*>/g, '');
+  return t.value.trim();
+}
+
+// Shared builder: numbers cells, creates entries, attaches clues.
+function build(w, h, isBlack, solAt, clueFor, title){
+  const cells = [], across = [], down = [];
+  for(let r=0;r<h;r++){ const row=[]; for(let c=0;c<w;c++) row.push({r,c,black:isBlack(r,c),sol:'',val:'',state:null,num:0,ent:{}}); cells.push(row); }
+  const white = (r,c) => r>=0 && c>=0 && r<h && c<w && !cells[r][c].black;
+  let n = 0;
+  for(let r=0;r<h;r++) for(let c=0;c<w;c++){
+    const cell = cells[r][c]; if(cell.black) continue;
+    cell.sol = solAt(r,c);
+    const sa = !white(r,c-1) && white(r,c+1), sd = !white(r-1,c) && white(r+1,c);
+    if(sa || sd) cell.num = ++n;
+    if(sa){ const e={dir:'A',num:n,cells:[]}; for(let k=c;white(r,k);k++){ e.cells.push(cells[r][k]); cells[r][k].ent.A=e; } e.clue=clueFor('A',n); across.push(e); }
+    if(sd){ const e={dir:'D',num:n,cells:[]}; for(let k=r;white(k,c);k++){ e.cells.push(cells[k][c]); cells[k][c].ent.D=e; } e.clue=clueFor('D',n); down.push(e); }
+  }
+  if(!across.length && !down.length) throw new Error('The puzzle has no answer entries.');
+  return {w,h,cells,across,down,all:across.concat(down),title:title||'Untitled puzzle'};
+}
+
+function parseIpuz(text){
+  text = text.replace(/^\uFEFF/, '').trim();
+  const jp = text.match(/^[\w$.]+\s*\(([\s\S]*)\)\s*;?$/);   // JSONP wrapper
+  if(jp) text = jp[1];
+  let d; try{ d = JSON.parse(text); }catch(e){ throw new Error('The file is not valid IPUZ (JSON could not be read).'); }
+  if(!d || !Array.isArray(d.puzzle) || !d.puzzle.length) throw new Error('This IPUZ file has no crossword grid.');
+  if(!Array.isArray(d.solution)) throw new Error('This IPUZ file has no solution, so answers cannot be checked.');
+  const block = d.block == null ? '#' : String(d.block);
+  const h = d.puzzle.length, w = Math.max(...d.puzzle.map(r => Array.isArray(r) ? r.length : 0));
+  if(!w) throw new Error('This IPUZ file has an empty grid.');
+  const raw = (r,c) => { let v = d.puzzle[r] && d.puzzle[r][c]; if(v && typeof v==='object') v = ('cell' in v) ? v.cell : 0; return v; };
+  const isBlack = (r,c) => { const v = raw(r,c); return v===null || v===undefined || String(v)===block; };
+  const solAt = (r,c) => {
+    let s = d.solution[r] && d.solution[r][c]; if(s && typeof s==='object') s = s.value;
+    if(s==null || s==='' || String(s)===block) throw new Error('The IPUZ solution is missing an answer at row '+(r+1)+', column '+(c+1)+'.');
+    return String(s).toUpperCase().slice(0,1);
+  };
+  const clues = d.clues || {};
+  const mk = re => {
+    const k = Object.keys(clues).find(x => re.test(x)); const m = {}, seq = []; let i = 0;
+    (k ? clues[k] : []).forEach(it => {
+      if(Array.isArray(it)) m[it[0]] = it[1];
+      else if(it && typeof it==='object'){ if(it.number!=null) m[it.number] = it.clue; else seq.push(it.clue); }
+      else seq.push(it);
+    });
+    return num => cleanText(m[num] !== undefined ? m[num] : (seq[i++] || ''));
+  };
+  const A = mk(/^across/i), D = mk(/^down/i);
+  return build(w, h, isBlack, solAt, (dr,num) => (dr==='A'?A:D)(num) || '(no clue)', cleanText(d.title));
+}
+
+function parsePuz(buf){
+  const u = new Uint8Array(buf), magic = 'ACROSS&DOWN';
+  let idx = -1;
+  for(let i=0;i+magic.length<=u.length && i<512;i++){ let ok=true; for(let k=0;k<magic.length;k++) if(u[i+k]!==magic.charCodeAt(k)){ok=false;break;} if(ok){idx=i;break;} }
+  if(idx < 2) throw new Error('The file is not a valid PUZ file.');
+  const o = idx - 2;
+  if(u.length < o+0x34) throw new Error('The PUZ file is truncated.');
+  const w = u[o+0x2C], h = u[o+0x2D], n = u[o+0x2E] | (u[o+0x2F]<<8), scr = u[o+0x32] | (u[o+0x33]<<8);
+  if(!w || !h) throw new Error('The PUZ file has an invalid grid size.');
+  if(scr !== 0) throw new Error('This PUZ file is scrambled (locked) and is not supported.');
+  let p = o + 0x34;
+  if(u.length < p + 2*w*h) throw new Error('The PUZ file is truncated.');
+  const sol = u.subarray(p, p + w*h); p += 2*w*h;
+  let dec; try{ new TextDecoder('utf-8',{fatal:true}).decode(u.subarray(p)); dec = new TextDecoder('utf-8'); }catch(e){ dec = new TextDecoder('windows-1252'); }
+  const str = () => { let e = p; while(e<u.length && u[e]!==0) e++; const s = dec.decode(u.subarray(p,e)); p = e+1; return s; };
+  const title = str(); str(); str();           // title, author, copyright
+  const list = []; for(let i=0;i<n;i++){ if(p>u.length) throw new Error('The PUZ file ends before all clues are read.'); list.push(str()); }
+  let qi = 0;
+  const isBlack = (r,c) => { const ch = sol[r*w+c]; return ch===0x2E || ch===0x3A; };
+  const solAt = (r,c) => String.fromCharCode(sol[r*w+c]).toUpperCase();
+  return build(w, h, isBlack, solAt, () => cleanText(list[qi++] || '') || '(no clue)', cleanText(title));
+}
+
+function parseFile(buf){
+  const u = new Uint8Array(buf.slice(0, 600)); let head = '';
+  for(const b of u) head += String.fromCharCode(b);
+  if(head.indexOf('ACROSS&DOWN') >= 0) return parsePuz(buf);
+  return parseIpuz(new TextDecoder('utf-8').decode(buf));
+}
+
+/* ---------- Timer ---------- */
+const fmt = ms => { const s = Math.floor(ms/1000), p = x => String(x).padStart(2,'0'); return p(Math.floor(s/3600))+':'+p(Math.floor(s/60)%60)+':'+p(s%60); };
+const elapsed = () => done ? finalMs : Date.now() - timerStart;
+function tick(){ $('timer').textContent = fmt(elapsed()); }
+function startTimer(){ clearInterval(timerId); done = false; finalMs = 0; timerStart = Date.now(); tick(); timerId = setInterval(tick, 250); }
+function stopTimer(){ finalMs = Date.now() - timerStart; done = true; clearInterval(timerId); tick(); }
+
+/* ---------- Loading ---------- */
+function showError(msg){ const e = $('error'); e.textContent = msg; e.hidden = false; }
+$('openBtn').onclick = () => $('file').click();
+$('file').onchange = async ev => {
+  const f = ev.target.files[0]; ev.target.value = '';
+  if(!f) return;
+  $('error').hidden = true;
+  try{
+    loadPuzzle(parseFile(await f.arrayBuffer()));
+  }catch(e){ showError('Could not open "' + f.name + '": ' + (e && e.message ? e.message : 'unsupported or invalid file.')); }
+};
+
+function loadPuzzle(puzzle){
+  P = puzzle; $('modal').hidden = true;
+  $('title').textContent = P.title; document.title = P.title + ' - Crossword Solver';
+  $('empty').hidden = true; $('main').hidden = false;
+  const g = $('grid'); g.innerHTML = ''; g.style.setProperty('--w', P.w);
+  P.cells.forEach(row => row.forEach(c => {
+    const el = document.createElement('div'); el.dataset.r = c.r; el.dataset.c = c.c;
+    if(c.num){ const n = document.createElement('span'); n.className='n'; n.textContent=c.num; el.appendChild(n); }
+    const t = document.createElement('span'); el.appendChild(t);
+    c.el = el; c.txt = t; g.appendChild(el);
+  }));
+  [['across',P.across],['down',P.down]].forEach(([id,list]) => {
+    const ol = $(id); ol.innerHTML = '';
+    list.forEach(e => { const li = document.createElement('li'); const b = document.createElement('b'); b.textContent = e.num;
+      li.appendChild(b); li.appendChild(document.createTextNode(e.clue)); li.onclick = () => { selectEntry(e); focusKb(); }; e.li = li; ol.appendChild(li); });
+  });
+  const first = P.all[0].cells[0]; sel = {r:first.r, c:first.c}; dir = P.all[0].dir;
+  layout(); render(); startTimer();
+}
+
+function layout(){
+  if(!P) return;
+  const wide = innerWidth >= 900;
+  let cs = Math.floor((wide ? innerWidth - 400 : innerWidth - 28) / P.w);
+  if(wide) cs = Math.min(cs, Math.floor((innerHeight - 180) / P.h));
+  $('grid').style.setProperty('--cs', Math.max(20, Math.min(46, cs)) + 'px');
+}
+addEventListener('resize', layout);
+
+/* ---------- Selection ---------- */
+const cur = () => P.cells[sel.r][sel.c];
+const other = d => d === 'A' ? 'D' : 'A';
+const curEntry = () => { const c = cur(); return c.ent[dir] || c.ent[other(dir)]; };
+function setSel(c){ sel = {r:c.r, c:c.c}; if(!c.ent[dir] && c.ent[other(dir)]) dir = other(dir); }
+function selectEntry(e){ dir = e.dir; sel = {r:e.cells[0].r, c:e.cells[0].c}; render(); }   // always the first cell
+function nextEntry(step){
+  const e = curEntry(), n = P.all.length;
+  const i = e ? P.all.indexOf(e) : -1;
+  selectEntry(P.all[((i + step) % n + n) % n]);
+}
+$('grid').addEventListener('click', ev => {
+  const el = ev.target.closest('[data-r]'); if(!el || !P) return;
+  const c = P.cells[+el.dataset.r][+el.dataset.c]; if(c.black) return;
+  if(c.r === sel.r && c.c === sel.c){ if(c.ent[other(dir)]) dir = other(dir); }
+  else setSel(c);
+  render(); focusKb();
+});
+function focusKb(){ try{ $('kb').focus({preventScroll:true}); }catch(e){} }
+
+/* ---------- Typing and keyboard ---------- */
+function typeChar(ch){
+  const c = cur(); c.val = ch.toUpperCase(); c.state = null;
+  const e = curEntry();
+  if(e){ const i = e.cells.indexOf(c); if(i < e.cells.length-1) setSel(e.cells[i+1]); }
+  render(); checkComplete();
+}
+function backspace(){
+  const c = cur();
+  if(c.val){ c.val = ''; c.state = null; }
+  else { const e = curEntry(); if(e){ const i = e.cells.indexOf(c); if(i > 0){ const pc = e.cells[i-1]; setSel(pc); pc.val = ''; pc.state = null; } } }
+  render();
+}
+function arrow(dr, dc){
+  let r = sel.r, c = sel.c;
+  do { r += dr; c += dc; } while(r>=0 && c>=0 && r<P.h && c<P.w && P.cells[r][c].black);
+  if(r<0 || c<0 || r>=P.h || c>=P.w) return;
+  const ax = dr ? 'D' : 'A', cell = P.cells[r][c];
+  if(cell.ent[ax]) dir = ax;
+  setSel(cell); render();
+}
+document.addEventListener('keydown', ev => {
+  if(ev.key === 'Escape' && !$('modal').hidden){ $('modal').hidden = true; return; }
+  if(!P || !$('modal').hidden || ev.ctrlKey || ev.metaKey || ev.altKey) return;
+  const k = ev.key;
+  if(k.length === 1 && /[a-z0-9]/i.test(k)){ ev.preventDefault(); typeChar(k); return; }
+  const map = {ArrowLeft:[0,-1],ArrowRight:[0,1],ArrowUp:[-1,0],ArrowDown:[1,0]};
+  if(map[k]){ ev.preventDefault(); arrow(...map[k]); }
+  else if(k === 'Backspace'){ ev.preventDefault(); backspace(); }
+  else if(k === 'Enter' || k === 'Tab'){ ev.preventDefault(); nextEntry(ev.shiftKey ? -1 : 1); }
+  else if(k === ' '){ ev.preventDefault(); if(cur().ent[other(dir)]){ dir = other(dir); render(); } }
+});
+// Soft keyboards (mobile) deliver text through the input event.
+$('kb').addEventListener('input', ev => {
+  const v = ev.target.value; ev.target.value = '';
+  if(P && $('modal').hidden) for(const ch of v) if(/[a-z0-9]/i.test(ch)) typeChar(ch);
+});
+
+/* ---------- Rendering ---------- */
+function render(){
+  const ent = curEntry(), set = new Set(ent ? ent.cells : []);
+  P.cells.forEach(row => row.forEach(c => {
+    let cls = 'cell';
+    if(c.black) cls += ' black';
+    else {
+      if(c.state) cls += ' ' + c.state;
+      if(set.has(c)) cls += ' hl';
+      if(c.r === sel.r && c.c === sel.c) cls += ' sel';
+      if(c.txt.textContent !== c.val) c.txt.textContent = c.val;
+    }
+    if(c.el.className !== cls) c.el.className = cls;
+  }));
+  P.all.forEach(e => { e.li.className = ''; });
+  const bar = $('clueBar'); bar.textContent = '';
+  if(ent){
+    ent.li.className = 'on';
+    const cross = cur().ent[other(ent.dir)]; if(cross) cross.li.className = 'cross';
+    [ent, cross].forEach(e => { if(!e) return; const ol = e.li.parentElement;
+      if(e.li.offsetTop < ol.scrollTop || e.li.offsetTop + e.li.offsetHeight > ol.scrollTop + ol.clientHeight) ol.scrollTop = e.li.offsetTop - ol.clientHeight/2; });
+    const b = document.createElement('b'); b.textContent = ent.num + (ent.dir==='A' ? ' Across' : ' Down');
+    bar.appendChild(b); bar.appendChild(document.createTextNode(ent.clue));
+  }
+}
+
+/* ---------- Checking ---------- */
+function checkCells(list){
+  list.forEach(c => { if(!c.black && c.val) c.state = (c.val === c.sol) ? 'ok' : 'bad'; });
+  render();
+}
+$('checkThis').onclick = () => { if(P){ const e = curEntry(); if(e) checkCells(e.cells); focusKb(); } };
+$('checkAll').onclick = () => { if(P){ checkCells(P.cells.flat()); focusKb(); } };
+
+/* ---------- Completion ---------- */
+const caesar = (s, k) => s.replace(/[a-z]/gi, ch => { const b = ch < 'a' ? 65 : 97; return String.fromCharCode((ch.charCodeAt(0) - b + k) % 26 + b); });
+const answer = e => e ? e.cells.map(c => c.sol).join('') : '';
+function checkComplete(){
+  if(done || !P) return;
+  if(!P.cells.every(row => row.every(c => c.black || c.val === c.sol))) return;
+  stopTimer();
+  const d2 = caesar(answer(P.down.find(e => e.num === 2)), 5);
+  const a1 = caesar(answer(P.across.find(e => e.num === 1)), 7);
+  resultString = fmt(finalMs) + '[' + d2 + ', ' + a1 + ']';
+  $('dlgMsg').textContent = 'You completed the puzzle! Copy and paste this string: ' + resultString + ' and tag @onesinglepoisondartfrog in Ziore Discord.';
+  $('copyBtn').textContent = 'Copy';
+  $('modal').hidden = false;
+}
+$('closeBtn').onclick = () => { $('modal').hidden = true; };
+$('copyBtn').onclick = async () => {
+  let ok = false;
+  try{ await navigator.clipboard.writeText(resultString); ok = true; }catch(e){}
+  if(!ok){
+    const t = document.createElement('textarea'); t.value = resultString; t.style.position = 'fixed'; t.style.opacity = '0';
+    document.body.appendChild(t); t.select();
+    try{ ok = document.execCommand('copy'); }catch(e){}
+    t.remove();
+  }
+  $('copyBtn').textContent = ok ? 'Copied' : 'Copy failed - select the text manually';
+};
+
+/* ---------- Theme ---------- */
+function applyTheme(t){ document.documentElement.setAttribute('data-theme', t); $('themeBtn').textContent = t === 'dark' ? 'Light mode' : 'Dark mode'; }
+(function(){
+  let t = null; try{ t = localStorage.getItem('xw-theme'); }catch(e){}
+  if(t !== 'dark' && t !== 'light') t = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  applyTheme(t);
+})();
+$('themeBtn').onclick = () => {
+  const t = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+  applyTheme(t); try{ localStorage.setItem('xw-theme', t); }catch(e){}
+  $('themeBtn').blur();
+};
+</script>
+</body>
+</html>
