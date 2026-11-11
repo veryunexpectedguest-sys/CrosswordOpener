@@ -34,6 +34,9 @@ main{display:flex;gap:18px;padding:14px;align-items:flex-start;flex-wrap:wrap}
 .cell.hl{background:var(--hl)}
 .cell.sel{background:var(--sel);box-shadow:inset 0 0 0 2px var(--accent)}
 .clues{flex:1 1 300px;min-width:260px;max-width:520px;display:flex;flex-direction:column;gap:12px}
+.srow{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--line)}
+.srow select{font:inherit;color:var(--text);background:var(--btn);border:1px solid var(--line);border-radius:6px;padding:6px 8px}
+.srow input[type=checkbox]{width:20px;height:20px;accent-color:var(--accent)}
 .cl{background:var(--panel);border:1px solid var(--line);border-radius:6px;overflow:hidden}
 .cl h2{margin:0;padding:7px 10px;font-size:14px;border-bottom:1px solid var(--line)}
 .cl ol{list-style:none;margin:0;padding:0;max-height:32vh;overflow-y:auto;position:relative}
@@ -41,14 +44,18 @@ main{display:flex;gap:18px;padding:14px;align-items:flex-start;flex-wrap:wrap}
 .cl li b{display:inline-block;min-width:24px;margin-right:4px}
 .cl li.cross{background:var(--hl)}
 .cl li.on{background:var(--sel);border-left-color:var(--accent)}
-#modal{position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;padding:16px;z-index:10}
+#modal,#settings{position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;padding:16px;z-index:10}
 #modal[hidden],[hidden]{display:none!important}
 .dlg{background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:20px;max-width:520px;width:100%}
 .dlg h2{margin:0 0 10px;font-size:19px}
 .dlg p{word-break:break-word}
 .dlg .row{display:flex;gap:8px;justify-content:flex-end}
 #kb{position:fixed;left:0;bottom:0;width:1px;height:1px;opacity:0;border:0;padding:0;font-size:16px}
-@media (min-width:900px){.cl ol{max-height:calc((100vh - 170px)/2 - 34px)}}
+@media (min-width:900px){.cl ol{max-height:calc((100vh - 170px)/2 - 34px)}
+main{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr)}
+.left{grid-column:2;grid-row:1}
+.clues{grid-column:3;grid-row:1;width:100%;min-width:0;max-width:340px;justify-self:start}
+body[data-clues="left"] .clues{grid-column:1;justify-self:end}}
 </style>
 </head>
 <body>
@@ -56,7 +63,7 @@ main{display:flex;gap:18px;padding:14px;align-items:flex-start;flex-wrap:wrap}
   <div class="title" id="title">Crossword Solver</div>
   <button id="openBtn" class="primary">Open Puzzle</button>
   <span id="timer" aria-label="Elapsed time">00:00:00</span>
-  <button id="themeBtn">Dark mode</button>
+  <button id="settingsBtn">Settings</button>
   <input type="file" id="file" accept=".ipuz,.puz,.json" hidden>
 </header>
 <div id="error" role="alert" hidden></div>
@@ -80,6 +87,15 @@ main{display:flex;gap:18px;padding:14px;align-items:flex-start;flex-wrap:wrap}
     <h2 id="dlgTitle">Puzzle complete</h2>
     <p id="dlgMsg"></p>
     <div class="row"><button id="copyBtn" class="primary">Copy</button><button id="closeBtn">Close</button></div>
+  </div>
+</div>
+<div id="settings" hidden>
+  <div class="dlg" role="dialog" aria-modal="true" aria-label="Settings">
+    <h2>Settings</h2>
+    <div class="srow"><span>Clues position (desktop)</span><select id="cluePos"><option value="right">Right</option><option value="left">Left</option></select></div>
+    <div class="srow"><span>Appearance</span><button id="themeBtn">Dark mode</button></div>
+    <div class="srow"><label for="sfx">Sound effects</label><input type="checkbox" id="sfx" checked></div>
+    <div class="row" style="margin-top:14px"><button id="settingsClose" class="primary">Done</button></div>
   </div>
 </div>
 <input id="kb" autocomplete="off" autocapitalize="characters" autocorrect="off" spellcheck="false" aria-label="Crossword input">
@@ -220,7 +236,7 @@ function loadPuzzle(puzzle){
 function layout(){
   if(!P) return;
   const wide = innerWidth >= 900;
-  let cs = Math.floor((wide ? innerWidth - 400 : innerWidth - 28) / P.w);
+  let cs = Math.floor((wide ? innerWidth - 740 : innerWidth - 28) / P.w);
   if(wide) cs = Math.min(cs, Math.floor((innerHeight - 180) / P.h));
   $('grid').style.setProperty('--cs', Math.max(20, Math.min(46, cs)) + 'px');
 }
@@ -251,13 +267,13 @@ function typeChar(ch){
   const c = cur(); c.val = ch.toUpperCase(); c.state = null;
   const e = curEntry();
   if(e){ const i = e.cells.indexOf(c); if(i < e.cells.length-1) setSel(e.cells[i+1]); }
-  render(); checkComplete();
+  render(); if(!checkComplete()) sfx('type');
 }
 function backspace(){
   const c = cur();
   if(c.val){ c.val = ''; c.state = null; }
   else { const e = curEntry(); if(e){ const i = e.cells.indexOf(c); if(i > 0){ const pc = e.cells[i-1]; setSel(pc); pc.val = ''; pc.state = null; } } }
-  render();
+  render(); sfx('back');
 }
 function arrow(dr, dc){
   let r = sel.r, c = sel.c;
@@ -268,8 +284,8 @@ function arrow(dr, dc){
   setSel(cell); render();
 }
 document.addEventListener('keydown', ev => {
-  if(ev.key === 'Escape' && !$('modal').hidden){ $('modal').hidden = true; return; }
-  if(!P || !$('modal').hidden || ev.ctrlKey || ev.metaKey || ev.altKey) return;
+  if(ev.key === 'Escape' && (!$('modal').hidden || !$('settings').hidden)){ $('modal').hidden = true; $('settings').hidden = true; return; }
+  if(!P || !$('modal').hidden || !$('settings').hidden || ev.ctrlKey || ev.metaKey || ev.altKey) return;
   const k = ev.key;
   if(k.length === 1 && /[a-z0-9]/i.test(k)){ ev.preventDefault(); typeChar(k); return; }
   const map = {ArrowLeft:[0,-1],ArrowRight:[0,1],ArrowUp:[-1,0],ArrowDown:[1,0]};
@@ -281,7 +297,7 @@ document.addEventListener('keydown', ev => {
 // Soft keyboards (mobile) deliver text through the input event.
 $('kb').addEventListener('input', ev => {
   const v = ev.target.value; ev.target.value = '';
-  if(P && $('modal').hidden) for(const ch of v) if(/[a-z0-9]/i.test(ch)) typeChar(ch);
+  if(P && $('modal').hidden && $('settings').hidden) for(const ch of v) if(/[a-z0-9]/i.test(ch)) typeChar(ch);
 });
 
 /* ---------- Rendering ---------- */
@@ -314,6 +330,7 @@ function render(){
 function checkCells(list){
   list.forEach(c => { if(!c.black && c.val) c.state = (c.val === c.sol) ? 'ok' : 'bad'; });
   render();
+  const st = list.map(c => c.state); sfx(st.includes('bad') ? 'bad' : st.includes('ok') ? 'good' : 'type');
 }
 $('checkThis').onclick = () => { if(P){ const e = curEntry(); if(e) checkCells(e.cells); focusKb(); } };
 $('checkAll').onclick = () => { if(P){ checkCells(P.cells.flat()); focusKb(); } };
@@ -330,7 +347,7 @@ function checkComplete(){
   resultString = fmt(finalMs) + '[' + d2 + ', ' + a1 + ']';
   $('dlgMsg').textContent = 'You completed the puzzle! Copy and paste this string: ' + resultString + ' and tag @onesinglepoisondartfrog in Ziore Discord.';
   $('copyBtn').textContent = 'Copy';
-  $('modal').hidden = false;
+  $('modal').hidden = false; sfx('win'); return true;
 }
 $('closeBtn').onclick = () => { $('modal').hidden = true; };
 $('copyBtn').onclick = async () => {
@@ -344,6 +361,40 @@ $('copyBtn').onclick = async () => {
   }
   $('copyBtn').textContent = ok ? 'Copied' : 'Copy failed - select the text manually';
 };
+
+/* ---------- Sound effects (synthesized, no audio files) ---------- */
+let AC = null;
+function tone(f, t0, d, type, v){
+  const t = AC.currentTime + t0, o = AC.createOscillator(), g = AC.createGain();
+  o.type = type; o.frequency.value = f;
+  g.gain.setValueAtTime(v, t); g.gain.exponentialRampToValueAtTime(0.0001, t + d);
+  o.connect(g); g.connect(AC.destination); o.start(t); o.stop(t + d + 0.02);
+}
+function sfx(name){
+  if(!S.sfx) return;
+  try{
+    AC = AC || new (window.AudioContext || window.webkitAudioContext)();
+    if(AC.state === 'suspended') AC.resume();
+    if(name === 'type') tone(620, 0, 0.06, 'triangle', 0.06);
+    else if(name === 'back') tone(330, 0, 0.07, 'triangle', 0.06);
+    else if(name === 'good'){ tone(660, 0, 0.12, 'sine', 0.08); tone(880, 0.1, 0.18, 'sine', 0.08); }
+    else if(name === 'bad'){ tone(200, 0, 0.12, 'square', 0.04); tone(150, 0.1, 0.2, 'square', 0.04); }
+    else if(name === 'win') [523, 659, 784, 1047].forEach((f, i) => tone(f, i * 0.14, 0.3, 'sine', 0.09));
+  }catch(e){}
+}
+
+/* ---------- Settings ---------- */
+const S = {clues:'right', sfx:true};
+try{ Object.assign(S, JSON.parse(localStorage.getItem('xw-settings') || '{}')); }catch(e){}
+function applyS(){ document.body.dataset.clues = S.clues === 'left' ? 'left' : 'right'; $('cluePos').value = S.clues === 'left' ? 'left' : 'right'; $('sfx').checked = !!S.sfx; }
+function saveS(){ try{ localStorage.setItem('xw-settings', JSON.stringify(S)); }catch(e){} }
+applyS();
+function closeSettings(){ $('settings').hidden = true; if(P && $('main').hidden === false) focusKb(); }
+$('settingsBtn').onclick = () => { $('settings').hidden = false; };
+$('settingsClose').onclick = closeSettings;
+$('settings').onclick = ev => { if(ev.target.id === 'settings') closeSettings(); };
+$('cluePos').onchange = ev => { S.clues = ev.target.value; saveS(); applyS(); layout(); };
+$('sfx').onchange = ev => { S.sfx = ev.target.checked; saveS(); sfx('type'); };
 
 /* ---------- Theme ---------- */
 function applyTheme(t){ document.documentElement.setAttribute('data-theme', t); $('themeBtn').textContent = t === 'dark' ? 'Light mode' : 'Dark mode'; }
